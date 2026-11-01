@@ -319,6 +319,8 @@ img { display: block; max-width: 100%; }
 .form-privacy { display: flex; align-items: center; justify-content: center; gap: 6px; margin: -4px 0 0; color: var(--muted); font-size: 8px; text-align: center; }
 .form-privacy svg { width: 13px; height: 13px; color: var(--teal); }
 .form-confirmation { margin: 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--teal) 35%, var(--line)); border-radius: 7px; color: var(--teal-deep); background: var(--teal-soft); font-size: 10px; line-height: 1.55; }
+.form-error { margin: 0; padding: 10px 12px; border: 1px solid #e4b7b7; border-radius: 7px; color: #8a3030; background: #fff3f2; font-size: 10px; line-height: 1.55; }
+.appointment-form button:disabled, .contact-form button:disabled, .login-form button:disabled { cursor: wait; opacity: .7; }
 
 /* Testimonials */
 .testimonials-section { background: var(--surface); }

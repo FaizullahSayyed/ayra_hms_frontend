@@ -1,16 +1,42 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { HiArrowUpRight, HiOutlineClock, HiOutlineEnvelope, HiOutlineMapPin, HiOutlinePhone } from "react-icons/hi2";
 import Reveal from "../components/Reveal";
 import SectionHeading from "../components/SectionHeading";
+import { submitContactMessage } from "../api/client";
 
 export default function ContactSection() {
-  const [sent, setSent] = useState(false);
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitting = useRef(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!event.currentTarget.reportValidity()) return;
-    setSent(true);
-    event.currentTarget.reset();
+    if (submitting.current) return;
+
+    const form = event.currentTarget;
+    if (!form.reportValidity()) return;
+
+    submitting.current = true;
+    setIsSubmitting(true);
+    setConfirmation("");
+    setError("");
+
+    try {
+      const values = new FormData(form);
+      const result = await submitContactMessage({
+        name: String(values.get("name") ?? ""),
+        email: String(values.get("email") ?? ""),
+        message: String(values.get("message") ?? ""),
+      });
+      setConfirmation(result.message);
+      form.reset();
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : "Unable to send your message. Please try again.");
+    } finally {
+      submitting.current = false;
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -37,13 +63,14 @@ export default function ContactSection() {
           </Reveal>
         </div>
         <Reveal className="contact-form-wrap">
-          <div className="contact-form-heading"><span className="eyebrow">Prefer to write?</span><h3>Send us a message.</h3><p>We'll be in touch soon. This demo form doesn't send or store messages.</p></div>
-          <form className="contact-form" onSubmit={handleSubmit}>
-            <label>Your name<input name="name" type="text" placeholder="Your name" autoComplete="name" minLength={2} required /></label>
-            <label>Email address<input name="email" type="email" placeholder="you@example.com" autoComplete="email" required /></label>
-            <label className="contact-message">How can we help?<textarea name="message" rows={3} placeholder="Write us a note..." minLength={5} required /></label>
-            <button type="submit" className="button button--primary">Send a demo message <HiArrowUpRight aria-hidden="true" /></button>
-            {sent && <p className="form-confirmation contact-confirmation" role="status">Thanks for reaching out. This is demo content; your message was not sent.</p>}
+          <div className="contact-form-heading"><span className="eyebrow">Prefer to write?</span><h3>Send us a message.</h3><p>Your message is saved only when submission succeeds.</p></div>
+          <form className="contact-form" onSubmit={handleSubmit} aria-busy={isSubmitting}>
+            <label>Your name<input name="name" type="text" placeholder="Your name" autoComplete="name" minLength={2} maxLength={120} required /></label>
+            <label>Email address<input name="email" type="email" placeholder="you@example.com" autoComplete="email" maxLength={254} required /></label>
+            <label className="contact-message">How can we help?<textarea name="message" rows={3} placeholder="Write us a note..." minLength={5} maxLength={2000} required /></label>
+            <button type="submit" className="button button--primary" disabled={isSubmitting}>{isSubmitting ? "Sending…" : <>Send message <HiArrowUpRight aria-hidden="true" /></>}</button>
+            {confirmation && <p className="form-confirmation contact-confirmation" role="status">{confirmation}</p>}
+            {error && <p className="form-error contact-confirmation" role="alert">{error}</p>}
           </form>
         </Reveal>
       </div>

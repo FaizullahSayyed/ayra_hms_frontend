@@ -14,7 +14,7 @@ export default function HeroSection() {
             <h1>Your Health,<br />Our <span>Priority.</span></h1>
             <p className="hero-copy">Experience compassionate healthcare powered by modern technology, expert doctors, and personalized treatment.</p>
             <div className="hero-actions">
-              <a className="button button--primary button--large" href="#appointment">Book an appointment <HiArrowUpRight aria-hidden="true" /></a>
+              <a className="button button--primary button--large" href="#appointment">Request an appointment <HiArrowUpRight aria-hidden="true" /></a>
               <a className="button button--text button--large" href="#services"><span className="play-icon">↘</span> Explore our services</a>
             </div>
             <div className="hero-trust">

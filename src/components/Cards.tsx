@@ -16,7 +16,13 @@ export function ServiceCard({ service, index }: { service: Service; index: numbe
   );
 }
 
-export function DoctorCard({ doctor }: { doctor: Doctor }) {
+export function DoctorCard({
+  doctor,
+  onRequestAppointment,
+}: {
+  doctor: Doctor;
+  onRequestAppointment: (doctor: Doctor) => void;
+}) {
   const reduceMotion = useReducedMotion();
   const [profileOpen, setProfileOpen] = useState(false);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
@@ -47,7 +53,7 @@ export function DoctorCard({ doctor }: { doctor: Doctor }) {
         <p>{doctor.experience}</p>
         <div className="doctor-card-actions">
           <button ref={profileButtonRef} className="button button--outline button--small" type="button" onClick={() => setProfileOpen(true)}>View profile</button>
-          <a className="button button--primary button--small" href="#appointment" aria-label={`Request an appointment with ${doctor.name}`}>Book visit</a>
+          <a className="button button--primary button--small" href="#appointment" aria-label={`Request an appointment with ${doctor.name}`} onClick={() => onRequestAppointment(doctor)}>Request visit</a>
         </div>
         <span className="doctor-verified"><HiCheckCircle aria-hidden="true" /> Ayra care team</span>
       </div>
@@ -80,7 +86,7 @@ export function DoctorCard({ doctor }: { doctor: Doctor }) {
               <h2 id={`doctor-profile-${doctor.initials}`}>{doctor.name}</h2>
               <p>{doctor.experience}. Our care team can help you learn more about this specialist and current availability.</p>
               <span className="doctor-modal-availability"><span />{doctor.availability}</span>
-              <a className="button button--primary button--full" href="#appointment" onClick={() => setProfileOpen(false)}>Request an appointment <HiArrowUpRight aria-hidden="true" /></a>
+              <a className="button button--primary button--full" href="#appointment" onClick={() => { onRequestAppointment(doctor); setProfileOpen(false); }}>Request an appointment <HiArrowUpRight aria-hidden="true" /></a>
             </motion.section>
           </motion.div>
         )}
