@@ -65,7 +65,7 @@ export default function Navbar() {
           <button className="theme-toggle icon-button" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}>
             {theme === "light" ? <HiOutlineMoon /> : <HiOutlineSun />}
           </button>
-          <Link className="nav-login" to="/login">Log in</Link>
+          <Link className="nav-login" to="/login">Sign in</Link>
           <a className="button button--primary button--small nav-book" href="#appointment">Request a visit <span aria-hidden="true">↗</span></a>
           <button className="menu-toggle icon-button" type="button" onClick={() => setMenuOpen((open) => !open)} aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen}>
             {menuOpen ? <HiXMark /> : <HiBars3 />}
@@ -75,7 +75,8 @@ export default function Navbar() {
           {menuOpen && (
             <motion.div className="mobile-menu" initial={reduceMotion ? false : { opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}>
               {links.map(([label, id]) => <a key={id} href={`#${id}`} onClick={closeMenu} className={active === id ? "mobile-link mobile-link--active" : "mobile-link"}>{label}</a>)}
-              <Link className="mobile-link" to="/login" onClick={closeMenu}>Log in</Link>
+              <Link className="mobile-link" to="/login" onClick={closeMenu}>Sign in</Link>
+              <Link className="mobile-link" to="/register" onClick={closeMenu}>Create an account</Link>
               <a className="button button--primary mobile-book" href="#appointment" onClick={closeMenu}>Request a visit <span aria-hidden="true">↗</span></a>
             </motion.div>
           )}
