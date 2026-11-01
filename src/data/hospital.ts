@@ -32,6 +32,7 @@ export interface Service {
 export interface Doctor {
   name: string;
   specialty: string;
+  department: string;
   experience: string;
   availability: string;
   image: string;
@@ -50,9 +51,9 @@ export const services: Service[] = [
 ];
 
 export const doctors: Doctor[] = [
-  { name: "Dr. Ananya Mehta", specialty: "Cardiologist", experience: "12 years experience", availability: "Available today", image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=720&q=82", initials: "AM" },
-  { name: "Dr. Rohan Shah", specialty: "Neurologist", experience: "9 years experience", availability: "Next slot · 10:30 AM", image: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=720&q=82", initials: "RS" },
-  { name: "Dr. Priya Nair", specialty: "Pediatrician", experience: "15 years experience", availability: "Available today", image: "https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&w=720&q=82", initials: "PN" },
+  { name: "Dr. Ananya Mehta", specialty: "Cardiologist", department: "Cardiology", experience: "12 years experience", availability: "Available today", image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=720&q=82", initials: "AM" },
+  { name: "Dr. Rohan Shah", specialty: "Neurologist", department: "Neurology", experience: "9 years experience", availability: "Next slot · 10:30 AM", image: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=720&q=82", initials: "RS" },
+  { name: "Dr. Priya Nair", specialty: "Pediatrician", department: "Pediatrics", experience: "15 years experience", availability: "Available today", image: "https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&w=720&q=82", initials: "PN" },
 ];
 
 export const testimonials = [

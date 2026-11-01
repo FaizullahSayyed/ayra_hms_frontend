@@ -11,7 +11,7 @@ export default function HeroSection() {
         <div className="hero-content">
           <Reveal>
             <div className="hero-kicker"><span className="kicker-pulse" /> Care for every chapter <span className="kicker-divider" /> Trusted since 2008</div>
-            <h1>Your health,<br />our <span>priority.</span></h1>
+            <h1>Your Health,<br />Our <span>Priority.</span></h1>
             <p className="hero-copy">Experience compassionate healthcare powered by modern technology, expert doctors, and personalized treatment.</p>
             <div className="hero-actions">
               <a className="button button--primary button--large" href="#appointment">Book an appointment <HiArrowUpRight aria-hidden="true" /></a>
@@ -33,7 +33,7 @@ export default function HeroSection() {
 
         <div className="hero-visual">
           <motion.div className="hero-photo-shell" initial={reduceMotion ? false : { opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: reduceMotion ? 0 : 0.7, delay: 0.12 }}>
-            <img className="hero-photo" src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=1200&q=88" alt="A doctor smiling in a bright, modern care setting" fetchPriority="high" />
+            <img className="hero-photo" src="https://images.unsplash.com/photo-1551601651-2a8555f1a136?auto=format&fit=crop&w=1200&q=88" alt="Surgeons working together in a modern operating room" fetchPriority="high" />
             <div className="photo-caption"><span className="caption-mark"><HiOutlineShieldCheck aria-hidden="true" /></span><span><strong>Care you can count on</strong><small>By your side, at every step</small></span></div>
           </motion.div>
           <motion.div className="floating-card floating-card--appointment" animate={reduceMotion ? undefined : { y: [0, -6, 0] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}>
