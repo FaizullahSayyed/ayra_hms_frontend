@@ -41,7 +41,7 @@ export default function Sidebar({
       {isOpen && <button className="dashboard-sidebar-scrim" type="button" onClick={onClose} aria-label="Close navigation" />}
       <aside className={`dashboard-sidebar${isOpen ? " dashboard-sidebar--open" : ""}`} aria-label="Dashboard sidebar">
         <div className="dashboard-sidebar-brand">
-          <span className="dashboard-brand-symbol"><HiOutlineBuildingOffice2 /></span>
+          <span className="dashboard-brand-symbol"><img src="/ayra-hospital-heart.svg" alt="" aria-hidden="true" /></span>
           <span><strong>ayra</strong><small>CARE WORKSPACE</small></span>
         </div>
         <div className="sidebar-workspace">

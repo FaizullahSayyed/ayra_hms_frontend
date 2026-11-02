@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { HiBars3, HiOutlineHeart, HiOutlineMoon, HiOutlineSun, HiXMark } from "react-icons/hi2";
+import { HiBars3, HiOutlineMoon, HiOutlineSun, HiXMark } from "react-icons/hi2";
 import { useTheme } from "../context/ThemeContext";
 
 const links = [
@@ -50,7 +50,7 @@ export default function Navbar() {
     >
       <nav className="nav-wrap container" aria-label="Main navigation">
         <a className="brand" href="#home" onClick={closeMenu} aria-label="Ayra Hospital home">
-          <span className="brand-mark"><HiOutlineHeart aria-hidden="true" /></span>
+          <span className="brand-mark"><img src="/ayra-hospital-heart.svg" alt="" aria-hidden="true" /></span>
           <span className="brand-copy"><strong>ayra</strong><small>HOSPITAL</small></span>
         </a>
         <div className="nav-links">

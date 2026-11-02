@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { HiArrowLeft, HiOutlineHeart } from "react-icons/hi2";
+import { HiArrowLeft } from "react-icons/hi2";
 import { signIn } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { getRoleDashboardPath } from "../components/auth/RoleDashboardRoutes";
@@ -41,7 +41,7 @@ export default function LoginPage() {
   return (
     <main className="login-page">
       <div className="login-decoration" aria-hidden="true" />
-      <Link to="/" className="brand login-brand"><span className="brand-mark"><HiOutlineHeart /></span><span className="brand-copy"><strong>ayra</strong><small>HOSPITAL</small></span></Link>
+      <Link to="/" className="brand login-brand"><span className="brand-mark"><img src="/ayra-hospital-heart.svg" alt="" aria-hidden="true" /></span><span className="brand-copy"><strong>ayra</strong><small>HOSPITAL</small></span></Link>
       <section className="login-card">
         <Link to="/" className="login-back"><HiArrowLeft /> Back to home</Link>
         <span className="eyebrow">Welcome back</span>

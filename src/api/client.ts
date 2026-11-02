@@ -77,6 +77,7 @@ export class ApiRequestError extends Error {
 let csrfToken: string | null = null;
 let csrfGeneration = 0;
 let currentUserRequest: Promise<SignedInUser | null> | null = null;
+let sessionApiBaseUrl: string | null = null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -86,16 +87,22 @@ function isRegistrationRole(value: unknown): value is RegistrationRole {
   return typeof value === "string" && registrationRoles.some((role) => role === value);
 }
 
-function getApiBaseUrl(): string {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, "");
-  if (!baseUrl) {
+function getApiBaseUrls(): string[] {
+  const configuredUrls = import.meta.env.VITE_API_BASE_URL
+    ?.split(",")
+    .map((url) => url.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  const uniqueUrls = configuredUrls ? [...new Set(configuredUrls)] : [];
+  if (uniqueUrls.length === 0) {
     throw new ApiRequestError(
-      "The hospital API is not configured. Set VITE_API_BASE_URL in the frontend environment.",
+      "The hospital API is not configured. Set one or more comma-separated URLs in VITE_API_BASE_URL.",
       0,
       "API_NOT_CONFIGURED",
     );
   }
-  return baseUrl;
+  return sessionApiBaseUrl
+    ? [sessionApiBaseUrl, ...uniqueUrls.filter((url) => url !== sessionApiBaseUrl)]
+    : uniqueUrls;
 }
 
 async function post<T>(
@@ -106,20 +113,32 @@ async function post<T>(
     credentials?: RequestCredentials;
     headers?: Record<string, string>;
     notFoundMessage?: string;
-    onSuccess?: (response: Response) => void;
+    sessionBound?: boolean;
+    onSuccess?: (response: Response, baseUrl: string) => void;
   } = {},
 ): Promise<T> {
-  const baseUrl = getApiBaseUrl();
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...options.headers },
-      body: JSON.stringify(body),
-      ...(options.credentials ? { credentials: options.credentials } : {}),
-    });
-  } catch {
-    throw new ApiRequestError("Unable to reach the hospital service. Please try again.", 0, "NETWORK_ERROR");
+  const baseUrls = getApiBaseUrls();
+  const requestUrls = options.sessionBound && sessionApiBaseUrl
+    ? [sessionApiBaseUrl]
+    : baseUrls;
+  let response: Response | undefined;
+  let responseBaseUrl: string | undefined;
+  for (const baseUrl of requestUrls) {
+    try {
+      response = await fetch(`${baseUrl}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...options.headers },
+        body: JSON.stringify(body),
+        ...(options.credentials ? { credentials: options.credentials } : {}),
+      });
+      responseBaseUrl = baseUrl;
+      break;
+    } catch {
+      continue;
+    }
+  }
+  if (!response || !responseBaseUrl) {
+    throw new ApiRequestError("Unable to reach any configured hospital service. Please try again.", 0, "NETWORK_ERROR");
   }
 
   let payload: unknown;
@@ -156,7 +175,7 @@ async function post<T>(
   }
 
   const result = parse(payload);
-  options.onSuccess?.(response);
+  options.onSuccess?.(response, responseBaseUrl);
   return result;
 }
 
@@ -242,6 +261,7 @@ function parseSignIn(value: unknown): SignInConfirmation {
 export function signIn(input: SignInInput): Promise<SignInConfirmation> {
   csrfGeneration += 1;
   csrfToken = null;
+  sessionApiBaseUrl = null;
   return post(
     "/v1/auth/login",
     input,
@@ -249,7 +269,7 @@ export function signIn(input: SignInInput): Promise<SignInConfirmation> {
     {
       credentials: "include",
       notFoundMessage: "Sign-in is not configured on the hospital backend yet. Please try again after the login endpoint is deployed.",
-      onSuccess: (response) => {
+      onSuccess: (response, baseUrl) => {
         const token = response.headers.get("X-CSRF-Token")?.trim();
         if (!token) {
           throw new ApiRequestError(
@@ -259,6 +279,7 @@ export function signIn(input: SignInInput): Promise<SignInConfirmation> {
           );
         }
         csrfToken = token;
+        sessionApiBaseUrl = baseUrl;
       },
     },
   );
@@ -266,16 +287,23 @@ export function signIn(input: SignInInput): Promise<SignInConfirmation> {
 
 async function fetchCurrentUser(): Promise<SignedInUser | null> {
   const requestGeneration = csrfGeneration;
-  const baseUrl = getApiBaseUrl();
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}/v1/auth/me`, {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiRequestError("Unable to reach the hospital service. Please try again.", 0, "NETWORK_ERROR");
+  let response: Response | undefined;
+  let responseBaseUrl: string | undefined;
+  for (const baseUrl of getApiBaseUrls()) {
+    try {
+      response = await fetch(`${baseUrl}/v1/auth/me`, {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      responseBaseUrl = baseUrl;
+      break;
+    } catch {
+      continue;
+    }
+  }
+  if (!response || !responseBaseUrl) {
+    throw new ApiRequestError("Unable to reach any configured hospital service. Please try again.", 0, "NETWORK_ERROR");
   }
 
   let payload: unknown;
@@ -286,7 +314,10 @@ async function fetchCurrentUser(): Promise<SignedInUser | null> {
   }
 
   if (response.status === 401) {
-    if (csrfGeneration === requestGeneration) csrfToken = null;
+    if (csrfGeneration === requestGeneration) {
+      csrfToken = null;
+      sessionApiBaseUrl = null;
+    }
     return null;
   }
 
@@ -316,7 +347,10 @@ async function fetchCurrentUser(): Promise<SignedInUser | null> {
     );
   }
 
-  if (csrfGeneration === requestGeneration) csrfToken = token;
+  if (csrfGeneration === requestGeneration) {
+    csrfToken = token;
+    sessionApiBaseUrl = responseBaseUrl;
+  }
   return { name: user.name, email: user.email, role: user.role };
 }
 
@@ -349,15 +383,18 @@ export async function signOut(): Promise<SignOutConfirmation> {
       {
         credentials: "include",
         headers: { "X-CSRF-Token": csrfToken },
+        sessionBound: true,
       },
     );
     csrfGeneration += 1;
     csrfToken = null;
+    sessionApiBaseUrl = null;
     return result;
   } catch (error) {
     if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
       csrfGeneration += 1;
       csrfToken = null;
+      sessionApiBaseUrl = null;
     }
     throw error;
   }

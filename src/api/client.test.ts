@@ -135,6 +135,63 @@ describe("hospital API client", () => {
     );
   });
 
+  it("fails over in order on network errors and keeps logout pinned to the successful login backend", async () => {
+    vi.stubEnv(
+      "VITE_API_BASE_URL",
+      "http://localhost:3001/api, https://ayra-hms-backend.vercel.app/",
+    );
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        message: "Signed in successfully.",
+        user: { name: "Aanya Patel", email: "aanya@example.test", role: "patient" },
+      }), { status: 200, headers: { "X-CSRF-Token": "fallback-session-csrf" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        message: "Signed out successfully.",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await signIn({ email: "aanya@example.test", password: "A-secure-password" });
+    await signOut();
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "http://localhost:3001/api/v1/auth/login",
+      "https://ayra-hms-backend.vercel.app/v1/auth/login",
+      "https://ayra-hms-backend.vercel.app/v1/auth/logout",
+    ]);
+    expect(fetchMock.mock.calls[2][1]).toEqual(expect.objectContaining({
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": "fallback-session-csrf",
+      },
+    }));
+  });
+
+  it("does not fail over on an HTTP authentication error", async () => {
+    vi.stubEnv(
+      "VITE_API_BASE_URL",
+      "http://localhost:3001/api,https://ayra-hms-backend.vercel.app/api",
+    );
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: false,
+      message: "Invalid email or password.",
+    }), { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(signIn({
+      email: "aanya@example.test",
+      password: "wrong-password",
+    })).rejects.toMatchObject({ status: 401, message: "Invalid email or password." });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/api/v1/auth/login",
+      expect.any(Object),
+    );
+  });
+
   it("reports clearly when the login endpoint has not been deployed", async () => {
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3001/api");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Not Found", { status: 404 })));

@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { HiOutlineHeart } from "react-icons/hi2";
 import { FaFacebookF, FaInstagram, FaLinkedinIn } from "react-icons/fa6";
 
 export default function Footer() {
@@ -9,7 +8,7 @@ export default function Footer() {
         <div className="footer-main">
           <div className="footer-brand">
             <a className="brand brand--footer" href="#home">
-              <span className="brand-mark"><HiOutlineHeart aria-hidden="true" /></span>
+              <span className="brand-mark"><img src="/ayra-hospital-heart.svg" alt="" aria-hidden="true" /></span>
               <span className="brand-copy"><strong>ayra</strong><small>HOSPITAL</small></span>
             </a>
             <p>Care for every chapter. Thoughtful healthcare, close to home, for you and the people you love.</p>

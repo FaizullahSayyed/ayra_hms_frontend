@@ -8,7 +8,9 @@ Production builds use the public API base URL in `.env.production`:
 
 `https://portfolio-backend-yek8.vercel.app/api`
 
-Local Vite development uses `.env.development` with `VITE_API_BASE_URL=http://localhost:3001/api`. For a different backend deployment or a Vercel Preview environment, set `VITE_API_BASE_URL` in the frontend project's Vercel environment settings and redeploy. Vite environment variables are embedded at build time.
+Set `VITE_API_BASE_URL` to one or more comma-separated backend API base URLs, with no quotes, for example `VITE_API_BASE_URL=http://localhost:3001/api,https://ayra-hms-backend.vercel.app/api`. URLs are tried in listed order and the next URL is used only when the previous fetch fails at the network level; HTTP responses such as validation, authentication, and server errors are returned directly without failover. Trailing slashes and duplicate URLs are normalized. The production environment uses the deployed backend first (and currently only).
+
+After login or session restoration succeeds, the selected backend is kept in memory and preferred for subsequent requests. Logout is sent only to that same backend so its session cookie and CSRF token stay paired. This selection is not persisted to browser storage. Local Vite development uses `.env.development`; for a different backend deployment or a Vercel Preview environment, set the same comma-separated `VITE_API_BASE_URL` value in the frontend project's Vercel environment settings and redeploy. Vite environment variables are embedded at build time.
 
 Patient registration sends `POST {VITE_API_BASE_URL}/v1/auth/register` with `name`, `email`, `password`, and the selected `role` (`patient` by default). For local development this resolves to `http://localhost:3001/api/v1/auth/register`. Confirm-password is validated in the browser and is never sent. The role selection is untrusted input; the backend must authorize staff roles and must never grant admin access solely because a public registration request asks for it. Registration does not sign the patient in.
 
