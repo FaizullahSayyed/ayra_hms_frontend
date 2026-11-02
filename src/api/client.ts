@@ -37,6 +37,10 @@ export interface SignInConfirmation {
   user: SignedInUser;
 }
 
+export interface SignOutConfirmation {
+  message: string;
+}
+
 export const registrationRoles = [
   "patient",
   "biller",
@@ -70,6 +74,10 @@ export class ApiRequestError extends Error {
   }
 }
 
+let csrfToken: string | null = null;
+let csrfGeneration = 0;
+let currentUserRequest: Promise<SignedInUser | null> | null = null;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -94,14 +102,19 @@ async function post<T>(
   path: string,
   body: unknown,
   parse: (value: unknown) => T,
-  options: { credentials?: RequestCredentials; notFoundMessage?: string } = {},
+  options: {
+    credentials?: RequestCredentials;
+    headers?: Record<string, string>;
+    notFoundMessage?: string;
+    onSuccess?: (response: Response) => void;
+  } = {},
 ): Promise<T> {
   const baseUrl = getApiBaseUrl();
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...options.headers },
       body: JSON.stringify(body),
       ...(options.credentials ? { credentials: options.credentials } : {}),
     });
@@ -111,7 +124,7 @@ async function post<T>(
 
   let payload: unknown;
   try {
-    payload = await response.json();
+    payload = response.status === 204 ? undefined : await response.json();
   } catch {
     if (!response.ok && response.status === 404 && options.notFoundMessage) {
       throw new ApiRequestError(options.notFoundMessage, response.status, "ENDPOINT_NOT_CONFIGURED");
@@ -142,7 +155,9 @@ async function post<T>(
     throw new ApiRequestError(message, response.status, code);
   }
 
-  return parse(payload);
+  const result = parse(payload);
+  options.onSuccess?.(response);
+  return result;
 }
 
 function parseSubmission(value: unknown, expectedStatus?: "requested"): SubmissionConfirmation {
@@ -225,6 +240,8 @@ function parseSignIn(value: unknown): SignInConfirmation {
 }
 
 export function signIn(input: SignInInput): Promise<SignInConfirmation> {
+  csrfGeneration += 1;
+  csrfToken = null;
   return post(
     "/v1/auth/login",
     input,
@@ -232,6 +249,116 @@ export function signIn(input: SignInInput): Promise<SignInConfirmation> {
     {
       credentials: "include",
       notFoundMessage: "Sign-in is not configured on the hospital backend yet. Please try again after the login endpoint is deployed.",
+      onSuccess: (response) => {
+        const token = response.headers.get("X-CSRF-Token")?.trim();
+        if (!token) {
+          throw new ApiRequestError(
+            "Sign-in succeeded, but the backend did not provide the required CSRF token. Please contact support before continuing.",
+            response.status,
+            "CSRF_TOKEN_MISSING",
+          );
+        }
+        csrfToken = token;
+      },
     },
   );
+}
+
+async function fetchCurrentUser(): Promise<SignedInUser | null> {
+  const requestGeneration = csrfGeneration;
+  const baseUrl = getApiBaseUrl();
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/v1/auth/me`, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiRequestError("Unable to reach the hospital service. Please try again.", 0, "NETWORK_ERROR");
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ApiRequestError("The hospital service returned an invalid response.", response.status, "INVALID_RESPONSE");
+  }
+
+  if (response.status === 401) {
+    if (csrfGeneration === requestGeneration) csrfToken = null;
+    return null;
+  }
+
+  if (!response.ok) {
+    const message = isRecord(payload) && typeof payload.message === "string"
+      ? payload.message
+      : "Unable to verify your sign-in session.";
+    throw new ApiRequestError(message, response.status, "SESSION_CHECK_FAILED");
+  }
+
+  const user = isRecord(payload) && isRecord(payload.user) ? payload.user : undefined;
+  const token = response.headers.get("X-CSRF-Token")?.trim();
+  if (
+    !isRecord(payload)
+    || payload.success !== true
+    || !user
+    || typeof user.name !== "string"
+    || typeof user.email !== "string"
+    || !isRegistrationRole(user.role)
+    || !token
+  ) {
+    if (csrfGeneration === requestGeneration) csrfToken = null;
+    throw new ApiRequestError(
+      "The hospital service returned an invalid session response.",
+      response.status,
+      "INVALID_RESPONSE",
+    );
+  }
+
+  if (csrfGeneration === requestGeneration) csrfToken = token;
+  return { name: user.name, email: user.email, role: user.role };
+}
+
+export function getCurrentUser(): Promise<SignedInUser | null> {
+  if (!currentUserRequest) {
+    currentUserRequest = fetchCurrentUser().finally(() => {
+      currentUserRequest = null;
+    });
+  }
+  return currentUserRequest;
+}
+
+function parseSignOut(value: unknown): SignOutConfirmation {
+  if (value === undefined) return { message: "Signed out successfully." };
+  if (!isRecord(value) || value.success !== true || (value.message !== undefined && typeof value.message !== "string")) {
+    throw new ApiRequestError("The sign-out service returned an unexpected response.", 0, "INVALID_RESPONSE");
+  }
+  return { message: typeof value.message === "string" ? value.message : "Signed out successfully." };
+}
+
+export async function signOut(): Promise<SignOutConfirmation> {
+  if (!csrfToken) {
+    throw new ApiRequestError("Your sign-in session is no longer available in this page. Please sign in again.", 0, "CSRF_TOKEN_UNAVAILABLE");
+  }
+  try {
+    const result = await post(
+      "/v1/auth/logout",
+      {},
+      parseSignOut,
+      {
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrfToken },
+      },
+    );
+    csrfGeneration += 1;
+    csrfToken = null;
+    return result;
+  } catch (error) {
+    if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
+      csrfGeneration += 1;
+      csrfToken = null;
+    }
+    throw error;
+  }
 }

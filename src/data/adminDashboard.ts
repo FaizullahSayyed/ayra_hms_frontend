@@ -6,6 +6,9 @@ import {
 } from "react-icons/hi2";
 import type { IconType } from "react-icons";
 
+export const adminDashboardPreviewNotice =
+  "Protected administrator route: your session and admin role were verified by the backend. The dashboard content is sample data only; live hospital records and admin actions are not connected.";
+
 export interface AdminStat {
   label: string;
   value: string;

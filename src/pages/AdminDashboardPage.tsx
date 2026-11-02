@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { HiArrowDownRight, HiArrowRight, HiArrowUpRight, HiOutlineArrowDownTray, HiOutlineCalendarDays, HiOutlineEllipsisHorizontal, HiOutlinePlus, HiOutlineSparkles, HiOutlineUserGroup } from "react-icons/hi2";
-import { adminStats, activityData, appointmentData, patientData } from "../data/adminDashboard";
+import { HiArrowDownRight, HiArrowRight, HiArrowUpRight, HiOutlineArrowDownTray, HiOutlineCalendarDays, HiOutlineEllipsisHorizontal, HiOutlineHome, HiOutlinePlus, HiOutlineSparkles, HiOutlineUserGroup } from "react-icons/hi2";
+import { useNavigate } from "react-router-dom";
+import { adminStats, activityData, adminDashboardPreviewNotice, appointmentData, patientData } from "../data/adminDashboard";
+import { getRoleDashboardInfo } from "../data/roleDashboards";
+import { useAuth } from "../context/AuthContext";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
 import type { DashboardNavItem } from "../components/dashboard/Sidebar";
+import RoleDashboardOverview from "../components/dashboard/RoleDashboardOverview";
 
 function MetricCard({ label, value, change, comparison, icon: Icon, color, trend, points }: (typeof adminStats)[number]) {
   const TrendIcon = trend === "up" ? HiArrowUpRight : HiArrowDownRight;
@@ -24,9 +28,13 @@ function SectionTitle({ eyebrow, title, titleId, action, onAction }: { eyebrow: 
 }
 
 export default function AdminDashboardPage() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [activeItem, setActiveItem] = useState("overview");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
+  const [signOutError, setSignOutError] = useState("");
+  const [signOutPending, setSignOutPending] = useState(false);
   const normalizedSearch = search.trim().toLowerCase();
   const filteredAppointments = appointmentData.filter((appointment) =>
     [appointment.id, appointment.patient, appointment.department, appointment.doctor, appointment.status]
@@ -44,21 +52,75 @@ export default function AdminDashboardPage() {
     setNotice(`${action} is a preview action. Live hospital records are not connected.`);
   }
 
+  if (!user) return null;
+
+  const roleInfo = getRoleDashboardInfo(user.role);
+  const firstName = user.name.trim().split(/\s+/)[0] || roleInfo.label;
+  const initials = user.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+  const dashboardUser = {
+    name: user.name,
+    email: user.email,
+    role: roleInfo.label,
+    initials,
+  };
+  const navigationItems = user.role === "admin"
+    ? undefined
+    : [{
+      id: "overview",
+      label: "Overview",
+      icon: HiOutlineHome,
+      sectionId: "role-overview",
+    }];
+
+  async function handleSignOut() {
+    setSignOutPending(true);
+    setSignOutError("");
+    try {
+      await signOut();
+      navigate("/login", { replace: true });
+    } catch (error) {
+      setSignOutError(error instanceof Error ? error.message : "Unable to sign out. Please try again.");
+    } finally {
+      setSignOutPending(false);
+    }
+  }
+
   return (
     <DashboardLayout
-      title="Good morning, Aarav"
-      description="Here's what's happening at your hospital today."
+      role={user.role}
+      roleLabel={roleInfo.label}
+      user={dashboardUser}
+      title={user.role === "admin" ? `Good morning, ${firstName}` : `${roleInfo.title} · ${firstName}`}
+      description={roleInfo.description}
       activeItem={activeItem}
       onNavigate={handleNavigate}
+      navigationItems={navigationItems}
       searchValue={search}
       onSearchChange={setSearch}
+      onSignOut={() => void handleSignOut()}
+      signOutPending={signOutPending}
     >
+      {signOutError && <p className="form-error dashboard-signout-error" role="alert">{signOutError}</p>}
+      {user.role === "admin" ? (
+      <>
+      <p className="dashboard-preview-warning" role="note">{adminDashboardPreviewNotice}</p>
       <div className="dashboard-welcome-banner">
         <div className="welcome-copy"><span><HiOutlineSparkles /> SUNDAY, NOVEMBER 1, 2026</span><h2>A healthier day starts with <i>great care.</i></h2><p>Your teams have a full day ahead. Here’s the latest hospital overview.</p></div>
         <div className="welcome-illustration" aria-hidden="true"><div className="welcome-sun" /><div className="welcome-plant welcome-plant--one" /><div className="welcome-plant welcome-plant--two" /><div className="welcome-building"><span /><span /><span /><span /><span /><span /></div></div>
         <span className="welcome-decoration welcome-decoration--one" /><span className="welcome-decoration welcome-decoration--two" />
       </div>
       {notice && <p className="dashboard-notice" role="status">{notice}<button type="button" onClick={() => setNotice("")} aria-label="Dismiss message">×</button></p>}
+
+      <section className="dashboard-panel quick-actions-panel quick-actions-panel--top" aria-labelledby="quick-actions-title">
+        <SectionTitle eyebrow="SHORTCUTS" title="Quick actions" titleId="quick-actions-title" />
+        <div className="quick-actions-grid">
+          <button type="button" className="quick-action" onClick={() => showPreviewNotice("Adding a patient")}><span className="quick-action-icon quick-action-icon--mint"><HiOutlinePlus /></span><span><strong>Add patient</strong><small>Register a new patient</small></span><HiArrowUpRight /></button>
+          <button type="button" className="quick-action" onClick={() => showPreviewNotice("Managing the schedule")}><span className="quick-action-icon quick-action-icon--blue"><HiOutlineCalendarDays /></span><span><strong>Manage schedule</strong><small>Review today's visits</small></span><HiArrowUpRight /></button>
+          <button type="button" className="quick-action" onClick={() => showPreviewNotice("Managing staff")}><span className="quick-action-icon quick-action-icon--lavender"><HiOutlineUserGroup /></span><span><strong>Manage staff</strong><small>View your care team</small></span><HiArrowUpRight /></button>
+          <button type="button" className="quick-action" onClick={() => showPreviewNotice("Exporting a report")}><span className="quick-action-icon quick-action-icon--peach"><HiOutlineArrowDownTray /></span><span><strong>Export report</strong><small>Download a summary</small></span><HiArrowUpRight /></button>
+        </div>
+        <p className="quick-actions-note">Actions are previews and are not connected to hospital records.</p>
+      </section>
 
       <section className="dashboard-section" id="admin-overview" aria-labelledby="admin-stats-title">
         <div className="dashboard-section-heading-inline"><div><span className="dashboard-overline">YOUR HOSPITAL AT A GLANCE</span><h2 id="admin-stats-title">Today’s overview</h2></div><span className="dashboard-period-label">NOVEMBER 2026</span></div>
@@ -94,7 +156,7 @@ export default function AdminDashboardPage() {
         </section>
       </div>
 
-      <div className="dashboard-lower-grid">
+      <div className="dashboard-patients-row">
         <section className="dashboard-panel patients-panel" id="admin-patients" aria-labelledby="patients-title">
           <SectionTitle eyebrow="PATIENT RELATIONSHIPS" title="Recently registered" titleId="patients-title" action="View patients" onAction={() => showPreviewNotice("The patient directory")} />
           <div className="recent-patient-list">{filteredPatients.map((patient) => <article className="recent-patient" key={patient.email}>
@@ -105,18 +167,11 @@ export default function AdminDashboardPage() {
           </article>)}{filteredPatients.length === 0 && <p className="dashboard-empty-state">No patients match “{search}”.</p>}</div>
           <button className="panel-bottom-link panel-bottom-button" onClick={() => showPreviewNotice("The patient directory")}>View patient directory <HiArrowRight /></button>
         </section>
-
-        <section className="dashboard-panel quick-actions-panel" aria-labelledby="quick-actions-title">
-          <SectionTitle eyebrow="SHORTCUTS" title="Quick actions" titleId="quick-actions-title" />
-          <div className="quick-actions-grid">
-            <button type="button" className="quick-action" onClick={() => showPreviewNotice("Adding a patient")}><span className="quick-action-icon quick-action-icon--mint"><HiOutlinePlus /></span><span><strong>Add patient</strong><small>Register a new patient</small></span><HiArrowUpRight /></button>
-            <button type="button" className="quick-action" onClick={() => showPreviewNotice("Managing the schedule")}><span className="quick-action-icon quick-action-icon--blue"><HiOutlineCalendarDays /></span><span><strong>Manage schedule</strong><small>Review today's visits</small></span><HiArrowUpRight /></button>
-            <button type="button" className="quick-action" onClick={() => showPreviewNotice("Managing staff")}><span className="quick-action-icon quick-action-icon--lavender"><HiOutlineUserGroup /></span><span><strong>Manage staff</strong><small>View your care team</small></span><HiArrowUpRight /></button>
-            <button type="button" className="quick-action" onClick={() => showPreviewNotice("Exporting a report")}><span className="quick-action-icon quick-action-icon--peach"><HiOutlineArrowDownTray /></span><span><strong>Export report</strong><small>Download a summary</small></span><HiArrowUpRight /></button>
-          </div>
-          <p className="quick-actions-note">Actions are previews and are not connected to hospital records.</p>
-        </section>
       </div>
+      </>
+      ) : (
+        <RoleDashboardOverview role={user.role} name={user.name} />
+      )}
     </DashboardLayout>
   );
 }

@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiRequestError,
+  getCurrentUser,
   registrationRoles,
   registerPatient,
+  signOut,
   signIn,
   submitAppointmentRequest,
   submitContactMessage,
@@ -14,6 +16,57 @@ afterEach(() => {
 });
 
 describe("hospital API client", () => {
+  it("restores the authenticated user and refreshes the CSRF token from the backend", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3001/api");
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        user: { name: "Aanya Patel", email: "aanya@example.test", role: "doctor" },
+      }), {
+        status: 200,
+        headers: { "X-CSRF-Token": "restored-session-csrf" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        message: "Signed out successfully.",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCurrentUser()).resolves.toEqual({
+      name: "Aanya Patel",
+      email: "aanya@example.test",
+      role: "doctor",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3001/api/v1/auth/me",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    await expect(signOut()).resolves.toEqual({ message: "Signed out successfully." });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:3001/api/v1/auth/logout",
+      expect.objectContaining({
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "restored-session-csrf",
+        },
+      }),
+    );
+  });
+
+  it("treats an expired session as unauthenticated", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3001/api");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: false,
+      message: "Authentication required.",
+    }), { status: 401 })));
+
+    await expect(getCurrentUser()).resolves.toBeNull();
+    await expect(signOut()).rejects.toMatchObject({ code: "CSRF_TOKEN_UNAVAILABLE" });
+  });
+
   it("registers a selected role at the v1 auth endpoint", async () => {
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3001/api");
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
@@ -61,7 +114,7 @@ describe("hospital API client", () => {
       success: true,
       message: "Signed in successfully.",
       user: { name: "Aanya Patel", email: "aanya@example.test", role: "patient" },
-    }), { status: 200 }));
+    }), { status: 200, headers: { "X-CSRF-Token": "csrf-session-token" } }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(signIn({
@@ -109,6 +162,56 @@ describe("hospital API client", () => {
     })).rejects.toMatchObject({
       status: 401,
       message: "Invalid email or password.",
+    });
+  });
+
+  it("sends logout with the session cookie and the CSRF token returned by login", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3001/api");
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        message: "Signed in successfully.",
+        user: { name: "Aanya Patel", email: "aanya@example.test", role: "patient" },
+      }), { status: 200, headers: { "X-CSRF-Token": "csrf-session-token" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        message: "Signed out successfully.",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await signIn({ email: "aanya@example.test", password: "A-secure-password" });
+    await expect(signOut()).resolves.toEqual({ message: "Signed out successfully." });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:3001/api/v1/auth/logout",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": "csrf-session-token",
+        },
+        body: "{}",
+      }),
+    );
+    await expect(signOut()).rejects.toMatchObject({ code: "CSRF_TOKEN_UNAVAILABLE" });
+  });
+
+  it("does not allow login success without the CSRF response header needed for logout", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3001/api");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      message: "Signed in successfully.",
+      user: { name: "Aanya Patel", email: "aanya@example.test", role: "patient" },
+    }), { status: 200 })));
+
+    await expect(signIn({
+      email: "aanya@example.test",
+      password: "A-secure-password",
+    })).rejects.toMatchObject({
+      status: 200,
+      code: "CSRF_TOKEN_MISSING",
     });
   });
 

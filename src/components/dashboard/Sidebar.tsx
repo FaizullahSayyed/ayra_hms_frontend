@@ -24,6 +24,7 @@ export default function Sidebar({
   activeItem,
   onNavigate,
   user,
+  roleLabel,
   isOpen,
   onClose,
 }: {
@@ -31,6 +32,7 @@ export default function Sidebar({
   activeItem: string;
   onNavigate: (item: DashboardNavItem) => void;
   user: DashboardUser;
+  roleLabel: string;
   isOpen: boolean;
   onClose: () => void;
 }) {
@@ -40,7 +42,7 @@ export default function Sidebar({
       <aside className={`dashboard-sidebar${isOpen ? " dashboard-sidebar--open" : ""}`} aria-label="Dashboard sidebar">
         <div className="dashboard-sidebar-brand">
           <span className="dashboard-brand-symbol"><HiOutlineBuildingOffice2 /></span>
-          <span><strong>ayra</strong><small>CARE ADMIN</small></span>
+          <span><strong>ayra</strong><small>CARE WORKSPACE</small></span>
         </div>
         <div className="sidebar-workspace">
           <span className="workspace-avatar">A</span>
@@ -72,7 +74,7 @@ export default function Sidebar({
         <div className="sidebar-help-card">
           <span className="help-card-icon">✳</span>
           <strong>Need a hand?</strong>
-          <p>Your hospital workspace is in preview mode.</p>
+          <p>Your {roleLabel.toLowerCase()} workspace is in preview mode.</p>
           <a href="mailto:hello@ayrahospital.example">Contact support <span>↗</span></a>
         </div>
         <div className="sidebar-account">

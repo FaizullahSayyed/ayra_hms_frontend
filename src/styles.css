@@ -598,6 +598,8 @@ a.contact-item:hover { transform: translateX(2px); border-color: color-mix(in sr
 :root[data-theme="dark"] .dashboard-shell { --dash-bg: #101d25; --dash-panel: #16262e; --dash-ink: #e6f0f1; --dash-muted: #94a8ad; --dash-line: #2a3e45; --dash-teal: #77d3c4; --dash-soft: #1b3035; }
 .dashboard-shell *, .dashboard-shell *::before, .dashboard-shell *::after { box-sizing: border-box; }
 .dashboard-sidebar { position: fixed; z-index: 35; inset: 0 auto 0 0; display: flex; flex-direction: column; width: 238px; padding: 21px 14px 14px; border-right: 1px solid var(--dash-line); color: var(--dash-ink); background: var(--dash-panel); }
+.dashboard-preview-warning { margin: 0 0 14px; border: 1px solid #e5d7b1; border-radius: 7px; padding: 10px 12px; color: #765d2b; background: #fcf8ec; font-size: 10px; line-height: 1.5; }
+:root[data-theme="dark"] .dashboard-preview-warning { border-color: #514832; color: #d7be82; background: #302c20; }
 .dashboard-sidebar-brand { display: flex; align-items: center; gap: 9px; padding: 0 8px; }
 .dashboard-brand-symbol { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; color: #fff; background: #167e73; }
 :root[data-theme="dark"] .dashboard-brand-symbol { color: #102721; background: #77d3c4; }
@@ -790,7 +792,9 @@ a.contact-item:hover { transform: translateX(2px); border-color: color-mix(in sr
 .activity-copy small, .activity-copy time { color: var(--dash-muted); font-size: 7px; }
 .activity-line { position: absolute; top: 28px; bottom: -2px; left: 11px; width: 1px; background: var(--dash-line); }
 .dashboard-lower-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(290px, .8fr); gap: 13px; margin-top: 13px; }
+.dashboard-patients-row { margin-top: 13px; }
 .patients-panel, .quick-actions-panel { padding: 15px 15px 0; }
+.quick-actions-panel--top { margin-top: 14px; }
 .recent-patient-list { display: grid; }
 .recent-patient { display: flex; align-items: center; gap: 8px; min-height: 47px; border-bottom: 1px solid color-mix(in srgb, var(--dash-line) 75%, transparent); }
 .recent-patient:last-child { border-bottom: 0; }
@@ -881,4 +885,41 @@ a.contact-item:hover { transform: translateX(2px); border-color: color-mix(in sr
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+.dashboard-shell[data-role="patient"] { --dash-bg: #f0f5ff; --dash-teal: #4b65b2; --dash-soft: #e7edff; }
+.dashboard-shell[data-role="biller"] { --dash-bg: #f3f7ea; --dash-teal: #697d30; --dash-soft: #eaf0d8; }
+.dashboard-shell[data-role="receptionist"] { --dash-bg: #fff4eb; --dash-teal: #b66b3f; --dash-soft: #ffeadb; }
+.dashboard-shell[data-role="nurse"] { --dash-bg: #eaf7f4; --dash-teal: #168276; --dash-soft: #d9f0e9; }
+.dashboard-shell[data-role="doctor"] { --dash-bg: #edf5fb; --dash-teal: #3974a2; --dash-soft: #dcecf8; }
+.dashboard-shell[data-role="admin"] { --dash-bg: #f3effa; --dash-teal: #7453a4; --dash-soft: #e9e0f5; }
+:root[data-theme="dark"] .dashboard-shell[data-role="patient"] { --dash-bg: #171d31; --dash-panel: #202942; --dash-teal: #a7b9ff; --dash-soft: #2b3655; }
+:root[data-theme="dark"] .dashboard-shell[data-role="biller"] { --dash-bg: #20251a; --dash-panel: #2a3121; --dash-teal: #c4d88b; --dash-soft: #39432b; }
+:root[data-theme="dark"] .dashboard-shell[data-role="receptionist"] { --dash-bg: #2b201b; --dash-panel: #372820; --dash-teal: #efb28a; --dash-soft: #493328; }
+:root[data-theme="dark"] .dashboard-shell[data-role="nurse"] { --dash-bg: #142622; --dash-panel: #1c332d; --dash-teal: #8be0ce; --dash-soft: #27463d; }
+:root[data-theme="dark"] .dashboard-shell[data-role="doctor"] { --dash-bg: #172531; --dash-panel: #203342; --dash-teal: #9acbf0; --dash-soft: #294354; }
+:root[data-theme="dark"] .dashboard-shell[data-role="admin"] { --dash-bg: #241e30; --dash-panel: #30273e; --dash-teal: #d1b3f2; --dash-soft: #403350; }
+.dashboard-signout { color: var(--dash-ink); }
+.dashboard-signout-error { margin: 0 0 14px; }
+.role-dashboard-overview { display: grid; gap: 16px; }
+.role-dashboard-welcome { position: relative; overflow: hidden; border: 1px solid color-mix(in srgb, var(--dash-teal) 18%, var(--dash-line)); border-radius: 12px; padding: clamp(24px, 4vw, 42px); background: linear-gradient(120deg, var(--dash-panel), var(--dash-soft)); }
+.role-dashboard-welcome::after { position: absolute; top: -75px; right: -40px; width: 240px; height: 240px; border: 1px solid color-mix(in srgb, var(--dash-teal) 20%, transparent); border-radius: 50%; content: ""; }
+.role-dashboard-welcome h2 { position: relative; z-index: 1; max-width: 580px; margin: 12px 0 7px; color: var(--dash-ink); font: 700 clamp(24px, 4vw, 36px)/1.15 var(--font-display); letter-spacing: -.04em; }
+.role-dashboard-welcome > p { position: relative; z-index: 1; max-width: 500px; margin: 0; color: var(--dash-muted); font-size: 13px; line-height: 1.7; }
+.role-dashboard-greeting { display: inline-block; margin-top: 21px; color: var(--dash-teal); font-size: 12px; font-weight: 700; }
+.role-dashboard-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.role-dashboard-card { min-height: 160px; border: 1px solid var(--dash-line); border-radius: 10px; padding: 18px; background: var(--dash-panel); }
+.role-dashboard-card-number { color: var(--dash-teal); font-size: 10px; font-weight: 700; letter-spacing: .12em; }
+.role-dashboard-card h2 { margin: 20px 0 5px; font: 700 15px/1.3 var(--font-display); }
+.role-dashboard-card p { margin: 0; color: var(--dash-muted); font-size: 10px; line-height: 1.6; }
+.role-dashboard-card-status { display: inline-block; margin-top: 16px; border-radius: 99px; padding: 5px 8px; color: var(--dash-teal); background: var(--dash-soft); font-size: 9px; font-weight: 700; }
+.auth-route-status, .auth-route-error { width: min(520px, calc(100% - 40px)); margin: 15vh auto; color: var(--ink); }
+.auth-route-status { text-align: center; }
+.auth-route-error { border: 1px solid var(--line); border-radius: 14px; padding: 28px; background: var(--surface); box-shadow: var(--shadow-soft); }
+.auth-route-error h1 { margin-top: 0; font: 700 24px/1.2 var(--font-display); }
+.auth-route-error p { color: var(--muted); line-height: 1.6; }
+
+@media (max-width: 680px) {
+  .role-dashboard-cards { grid-template-columns: 1fr; }
+  .role-dashboard-card { min-height: auto; }
 }

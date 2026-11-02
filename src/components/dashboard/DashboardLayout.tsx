@@ -1,36 +1,38 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import type { RegistrationRole } from "../../api/client";
 import DashboardNavbar from "./DashboardNavbar";
 import Sidebar, { adminNavigation, type DashboardNavItem } from "./Sidebar";
 import type { DashboardUser } from "./UserProfile";
 
-const previewAdmin: DashboardUser = {
-  name: "Aarav Mehta",
-  email: "admin.preview@ayrahospital.example",
-  role: "Hospital administrator · Preview",
-  initials: "AM",
-};
-
 export default function DashboardLayout({
   children,
+  role,
+  roleLabel,
   title,
   description,
   activeItem,
   onNavigate,
   navigationItems = adminNavigation,
-  user = previewAdmin,
+  user,
   searchValue,
   onSearchChange,
+  onSignOut,
+  signOutPending = false,
 }: {
   children: ReactNode;
+  role: RegistrationRole;
+  roleLabel: string;
   title: string;
   description: string;
   activeItem: string;
   onNavigate: (item: DashboardNavItem) => void;
   navigationItems?: DashboardNavItem[];
-  user?: DashboardUser;
+  user: DashboardUser;
   searchValue: string;
   onSearchChange: (value: string) => void;
+  onSignOut: () => void;
+  signOutPending?: boolean;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
@@ -50,17 +52,18 @@ export default function DashboardLayout({
     if (item.sectionId) {
       document.getElementById(item.sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
     } else {
-      navigate(`/admin/dashboard/${item.id}`);
+      navigate(`/${role}/dashboard/${item.id}`);
     }
   }
 
   return (
-    <div className="dashboard-shell">
+    <div className="dashboard-shell" data-role={role}>
       <Sidebar
         items={navigationItems}
         activeItem={activeItem}
         onNavigate={handleNavigate}
         user={user}
+        roleLabel={roleLabel}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -74,11 +77,16 @@ export default function DashboardLayout({
         />
         <main className="dashboard-content">
           <div className="dashboard-page-heading">
-            <div><span className="dashboard-eyebrow">AYRA HOSPITAL <i /> ADMIN WORKSPACE</span><h1>{title}</h1><p>{description}</p></div>
-            <div className="dashboard-heading-actions"><span className="dashboard-date"><span>◷</span> Sunday, November 1</span></div>
+            <div><span className="dashboard-eyebrow">AYRA HOSPITAL <i /> {roleLabel.toUpperCase()} WORKSPACE</span><h1>{title}</h1><p>{description}</p></div>
+            <div className="dashboard-heading-actions">
+              <span className="dashboard-date"><span>◷</span> {new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date())}</span>
+              <button className="button button--outline button--small dashboard-signout" type="button" onClick={onSignOut} disabled={signOutPending}>
+                {signOutPending ? "Signing out…" : "Sign out"}
+              </button>
+            </div>
           </div>
           {children}
-          <footer className="dashboard-footer"><span>Ayra Hospital · Admin preview</span><span>Sample data only · Not connected to live hospital records</span></footer>
+          <footer className="dashboard-footer"><span>Ayra Hospital · {roleLabel} workspace</span><span>Preview data only · Not connected to live hospital records</span></footer>
         </main>
       </div>
     </div>
