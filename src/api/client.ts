@@ -126,7 +126,7 @@ export class ApiRequestError extends Error {
 
 let csrfToken: string | null = null;
 let csrfGeneration = 0;
-let currentUserRequest: Promise<SignedInUser | null> | null = null;
+let currentUserRequest: { generation: number; promise: Promise<SignedInUser | null> } | null = null;
 let sessionApiBaseUrl: string | null = null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -146,21 +146,7 @@ function isPatientGender(value: unknown): value is PatientGender {
 }
 
 function getApiBaseUrls(): string[] {
-  const configuredUrls = import.meta.env.VITE_API_BASE_URL
-    ?.split(",")
-    .map((url) => url.trim().replace(/\/+$/, ""))
-    .filter(Boolean);
-  const uniqueUrls = configuredUrls ? [...new Set(configuredUrls)] : [];
-  if (uniqueUrls.length === 0) {
-    throw new ApiRequestError(
-      "The hospital API is not configured. Set one or more comma-separated URLs in VITE_API_BASE_URL.",
-      0,
-      "API_NOT_CONFIGURED",
-    );
-  }
-  return sessionApiBaseUrl
-    ? [sessionApiBaseUrl, ...uniqueUrls.filter((url) => url !== sessionApiBaseUrl)]
-    : uniqueUrls;
+  return ["/api"];
 }
 
 async function post<T>(
@@ -187,7 +173,7 @@ async function post<T>(
         method: "POST",
         headers: { "Content-Type": "application/json", ...options.headers },
         body: JSON.stringify(body),
-        ...(options.credentials ? { credentials: options.credentials } : {}),
+        credentials: options.credentials ?? "include",
       });
       responseBaseUrl = baseUrl;
       break;
@@ -196,7 +182,7 @@ async function post<T>(
     }
   }
   if (!response || !responseBaseUrl) {
-    throw new ApiRequestError("Unable to reach any configured hospital service. Please try again.", 0, "NETWORK_ERROR");
+    throw new ApiRequestError("Unable to reach the hospital service. Please try again.", 0, "NETWORK_ERROR");
   }
 
   let payload: unknown;
@@ -598,14 +584,7 @@ async function fetchCurrentUser(): Promise<SignedInUser | null> {
     }
   }
   if (!response || !responseBaseUrl) {
-    throw new ApiRequestError("Unable to reach any configured hospital service. Please try again.", 0, "NETWORK_ERROR");
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new ApiRequestError("The hospital service returned an invalid response.", response.status, "INVALID_RESPONSE");
+    throw new ApiRequestError("Unable to reach the hospital service. Please try again.", 0, "NETWORK_ERROR");
   }
 
   if (response.status === 401) {
@@ -614,6 +593,13 @@ async function fetchCurrentUser(): Promise<SignedInUser | null> {
       sessionApiBaseUrl = null;
     }
     return null;
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ApiRequestError("The hospital service returned an invalid response.", response.status, "INVALID_RESPONSE");
   }
 
   if (!response.ok) {
@@ -650,12 +636,15 @@ async function fetchCurrentUser(): Promise<SignedInUser | null> {
 }
 
 export function getCurrentUser(): Promise<SignedInUser | null> {
-  if (!currentUserRequest) {
-    currentUserRequest = fetchCurrentUser().finally(() => {
-      currentUserRequest = null;
-    });
+  if (currentUserRequest?.generation === csrfGeneration) {
+    return currentUserRequest.promise;
   }
-  return currentUserRequest;
+  const generation = csrfGeneration;
+  const promise = fetchCurrentUser().finally(() => {
+    if (currentUserRequest?.promise === promise) currentUserRequest = null;
+  });
+  currentUserRequest = { generation, promise };
+  return promise;
 }
 
 function parseSignOut(value: unknown): SignOutConfirmation {
@@ -668,7 +657,9 @@ function parseSignOut(value: unknown): SignOutConfirmation {
 
 export async function signOut(): Promise<SignOutConfirmation> {
   if (!csrfToken) {
-    throw new ApiRequestError("Your sign-in session is no longer available in this page. Please sign in again.", 0, "CSRF_TOKEN_UNAVAILABLE");
+    csrfGeneration += 1;
+    sessionApiBaseUrl = null;
+    throw new ApiRequestError("Your sign-in session is no longer available in this page. Please sign in again.", 401, "CSRF_TOKEN_UNAVAILABLE");
   }
   try {
     const result = await post(

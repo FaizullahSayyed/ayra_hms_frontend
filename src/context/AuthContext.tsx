@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  ApiRequestError,
   getCurrentUser,
   signOut as requestSignOut,
   type SignedInUser,
@@ -32,43 +33,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [error, setError] = useState("");
   const authRevision = useRef(0);
+  const refreshRequest = useRef<Promise<void> | null>(null);
 
   const refreshSession = useCallback(async () => {
+    if (refreshRequest.current) return refreshRequest.current;
     const revision = ++authRevision.current;
     setStatus("loading");
     setError("");
-    try {
-      const currentUser = await getCurrentUser();
-      if (revision !== authRevision.current) return;
-      setUser(currentUser);
-      setStatus(currentUser ? "authenticated" : "unauthenticated");
-    } catch (sessionError) {
-      if (revision !== authRevision.current) return;
-      setUser(null);
-      setStatus("error");
-      setError(sessionError instanceof Error
-        ? sessionError.message
-        : "Unable to verify your sign-in session.");
-    }
+    const request = Promise.resolve().then(async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        if (revision !== authRevision.current) return;
+        setUser(currentUser);
+        setStatus(currentUser ? "authenticated" : "unauthenticated");
+      } catch (sessionError) {
+        if (revision !== authRevision.current) return;
+        setUser(null);
+        setStatus("error");
+        setError(sessionError instanceof Error
+          ? sessionError.message
+          : "Unable to verify your sign-in session.");
+      }
+    });
+    refreshRequest.current = request;
+    void request.finally(() => {
+      if (refreshRequest.current === request) refreshRequest.current = null;
+    });
+    return request;
   }, []);
 
   useEffect(() => {
     void refreshSession();
   }, [refreshSession]);
 
+  useEffect(() => {
+    const revalidateWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshSession();
+    };
+    document.addEventListener("visibilitychange", revalidateWhenVisible);
+    return () => document.removeEventListener("visibilitychange", revalidateWhenVisible);
+  }, [refreshSession]);
+
   const setAuthenticatedUser = useCallback((authenticatedUser: SignedInUser) => {
     authRevision.current += 1;
+    refreshRequest.current = null;
     setUser(authenticatedUser);
     setStatus("authenticated");
     setError("");
   }, []);
 
   const signOut = useCallback(async () => {
-    await requestSignOut();
-    authRevision.current += 1;
-    setUser(null);
-    setStatus("unauthenticated");
-    setError("");
+    try {
+      await requestSignOut();
+      authRevision.current += 1;
+      refreshRequest.current = null;
+      setUser(null);
+      setStatus("unauthenticated");
+      setError("");
+    } catch (signOutError) {
+      if (signOutError instanceof ApiRequestError && signOutError.status === 401) {
+        authRevision.current += 1;
+        refreshRequest.current = null;
+        setUser(null);
+        setStatus("unauthenticated");
+        setError("");
+        return;
+      }
+      throw signOutError;
+    }
   }, []);
 
   const value = useMemo(

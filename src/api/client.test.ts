@@ -19,6 +19,28 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it("deduplicates concurrent current-session checks", async () => {
+  vi.stubEnv("VITE_API_BASE_URL", "/api");
+  let resolveResponse: (response: Response) => void = () => undefined;
+  const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+    resolveResponse = resolve;
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  const firstCheck = getCurrentUser();
+  const secondCheck = getCurrentUser();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  resolveResponse(new Response(JSON.stringify({
+    success: true,
+    user: { name: "Aanya Patel", email: "aanya@example.test", role: "doctor" },
+  }), { status: 200, headers: { "X-CSRF-Token": "deduplicated-session-csrf" } }));
+
+  await expect(Promise.all([firstCheck, secondCheck])).resolves.toEqual([
+    { name: "Aanya Patel", email: "aanya@example.test", role: "doctor" },
+    { name: "Aanya Patel", email: "aanya@example.test", role: "doctor" },
+  ]);
+});
+
 describe("hospital API client", () => {
   it("restores the authenticated user and refreshes the CSRF token from the backend", async () => {
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3001/api");
@@ -43,13 +65,13 @@ describe("hospital API client", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3001/api/v1/auth/me",
+      "/api/v1/auth/me",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     await expect(signOut()).resolves.toEqual({ message: "Signed out successfully." });
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:3001/api/v1/auth/logout",
+      "/api/v1/auth/logout",
       expect.objectContaining({
         credentials: "include",
         headers: {
@@ -97,7 +119,7 @@ describe("hospital API client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:3001/api/v1/admin/users",
+      "/api/v1/admin/users",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
@@ -195,7 +217,7 @@ describe("hospital API client", () => {
     }]);
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:3001/api/v1/admin/patients",
+      "/api/v1/admin/patients",
       expect.objectContaining({
         method: "GET",
         credentials: "include",
@@ -246,7 +268,7 @@ describe("hospital API client", () => {
     }]);
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:3001/api/v1/admin/users",
+      "/api/v1/admin/users",
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
@@ -309,7 +331,7 @@ describe("hospital API client", () => {
     })).resolves.toEqual({ message: "Staff account updated." });
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:3001/api/v1/admin/users/staff-123",
+      "/api/v1/admin/users/staff-123",
       expect.objectContaining({
         method: "PATCH",
         credentials: "include",
@@ -330,15 +352,49 @@ describe("hospital API client", () => {
     );
   });
 
-  it("treats an expired session as unauthenticated", async () => {
+  it("treats a bodyless 401 as unauthenticated and clears the in-memory CSRF token", async () => {
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3001/api");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      success: false,
-      message: "Authentication required.",
-    }), { status: 401 })));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
 
     await expect(getCurrentUser()).resolves.toBeNull();
-    await expect(signOut()).rejects.toMatchObject({ code: "CSRF_TOKEN_UNAVAILABLE" });
+    await expect(signOut()).rejects.toMatchObject({ status: 401, code: "CSRF_TOKEN_UNAVAILABLE" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/me",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
+  it("keeps API verification failures distinct from an unauthenticated session", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "/api");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: false,
+      message: "Session service unavailable.",
+    }), { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCurrentUser()).rejects.toMatchObject({
+      status: 503,
+      code: "SESSION_CHECK_FAILED",
+      message: "Session service unavailable.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/me",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("reports network failures while checking the current session", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "/api");
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getCurrentUser()).rejects.toMatchObject({
+      code: "NETWORK_ERROR",
+      message: "Unable to reach the hospital service. Please try again.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("registers a selected role at the v1 auth endpoint", async () => {
@@ -361,7 +417,7 @@ describe("hospital API client", () => {
     })).resolves.toEqual({ message: "Registration submitted successfully", role: "doctor" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3001/api/v1/auth/register",
+      "/api/v1/auth/register",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -406,7 +462,7 @@ describe("hospital API client", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3001/api/v1/auth/login",
+      "/api/v1/auth/login",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
@@ -415,39 +471,39 @@ describe("hospital API client", () => {
     );
   });
 
-  it("fails over in order on network errors and keeps logout pinned to the successful login backend", async () => {
+  it("supports same-origin API paths for deployments that proxy the API", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "/api");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      message: "Signed in successfully.",
+      user: { name: "Aanya Patel", email: "aanya@example.test", role: "admin" },
+    }), { status: 200, headers: { "X-CSRF-Token": "same-origin-csrf" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await signIn({ email: "aanya@example.test", password: "A-secure-password" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/login",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+  });
+
+  it("never fails over to a cross-origin API when the same-origin proxy is unreachable", async () => {
     vi.stubEnv(
       "VITE_API_BASE_URL",
       "http://localhost:3001/api, https://ayra-hms-backend.vercel.app/",
     );
-    const fetchMock = vi.fn()
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        success: true,
-        message: "Signed in successfully.",
-        user: { name: "Aanya Patel", email: "aanya@example.test", role: "patient" },
-      }), { status: 200, headers: { "X-CSRF-Token": "fallback-session-csrf" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        success: true,
-        message: "Signed out successfully.",
-      }), { status: 200 }));
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     vi.stubGlobal("fetch", fetchMock);
 
-    await signIn({ email: "aanya@example.test", password: "A-secure-password" });
-    await signOut();
+    await expect(signIn({ email: "aanya@example.test", password: "A-secure-password" }))
+      .rejects.toMatchObject({ code: "NETWORK_ERROR" });
 
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "http://localhost:3001/api/v1/auth/login",
-      "https://ayra-hms-backend.vercel.app/v1/auth/login",
-      "https://ayra-hms-backend.vercel.app/v1/auth/logout",
-    ]);
-    expect(fetchMock.mock.calls[2][1]).toEqual(expect.objectContaining({
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": "fallback-session-csrf",
-      },
-    }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/auth/login",
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 
   it("does not fail over on an HTTP authentication error", async () => {
@@ -467,7 +523,7 @@ describe("hospital API client", () => {
     })).rejects.toMatchObject({ status: 401, message: "Invalid email or password." });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3001/api/v1/auth/login",
+      "/api/v1/auth/login",
       expect.any(Object),
     );
   });
@@ -521,7 +577,7 @@ describe("hospital API client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:3001/api/v1/auth/logout",
+      "/api/v1/auth/logout",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
@@ -533,6 +589,22 @@ describe("hospital API client", () => {
       }),
     );
     await expect(signOut()).rejects.toMatchObject({ code: "CSRF_TOKEN_UNAVAILABLE" });
+  });
+
+  it("clears the stale session and CSRF token when logout returns 401", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "/api");
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        user: { name: "Aanya Patel", email: "aanya@example.test", role: "admin" },
+      }), { status: 200, headers: { "X-CSRF-Token": "expired-session-csrf" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getCurrentUser();
+    await expect(signOut()).rejects.toMatchObject({ status: 401 });
+    await expect(signOut()).rejects.toMatchObject({ status: 401, code: "CSRF_TOKEN_UNAVAILABLE" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not allow login success without the CSRF response header needed for logout", async () => {
@@ -617,7 +689,7 @@ describe("hospital API client", () => {
     });
   });
 
-  it("submits appointment requests to the configured backend", async () => {
+  it("submits appointment requests through the same-origin API proxy", async () => {
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3001/api/");
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       data: { id: 12, status: "requested", message: "Request received; not confirmed." },
@@ -635,8 +707,8 @@ describe("hospital API client", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3001/api/appointment-requests",
-      expect.objectContaining({ method: "POST" }),
+      "/api/appointment-requests",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
     );
     expect(result.status).toBe("requested");
   });
@@ -658,13 +730,21 @@ describe("hospital API client", () => {
     } satisfies Partial<ApiRequestError>);
   });
 
-  it("does not claim a success when the API base URL is missing", async () => {
+  it("uses the same-origin API path even when the API base environment value is missing", async () => {
     vi.stubEnv("VITE_API_BASE_URL", "");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: { id: 21, message: "Message received." },
+    }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
 
     await expect(submitContactMessage({
       name: "Aanya Patel",
       email: "aanya@example.test",
       message: "A question",
-    })).rejects.toMatchObject({ code: "API_NOT_CONFIGURED" });
+    })).resolves.toEqual({ id: 21, message: "Message received." });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/contact-messages",
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 });
