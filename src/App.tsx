@@ -3,6 +3,7 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
+import CreateUserPage from "./pages/CreateUserPage";
 import {
   ProtectedRoleDashboard,
   RoleDashboardRedirect,
@@ -26,6 +27,17 @@ export default function App() {
           )}
         />
       ))}
+      <Route
+        path="/admin/users/new"
+        element={(
+          <ProtectedRoleDashboard role="admin">
+            <>
+              <AdminDashboardPage />
+              <CreateUserPage />
+            </>
+          </ProtectedRoleDashboard>
+        )}
+      />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="*" element={<HomePage />} />

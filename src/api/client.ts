@@ -14,12 +14,21 @@ export interface ContactMessageInput {
   message: string;
 }
 
-export interface PatientRegistrationInput {
-  name: string;
+export type PatientGender = "female" | "male" | "non-binary" | "prefer-not-to-say";
+
+export interface UserAccountInput {
+  username: string;
   email: string;
+  firstName: string;
+  lastName: string;
   password: string;
+  phone?: string;
+  gender: PatientGender;
   role: RegistrationRole;
 }
+
+export type PatientRecordInput = UserAccountInput;
+export type PatientRegistrationInput = UserAccountInput;
 
 export interface SignInInput {
   email: string;
@@ -57,6 +66,47 @@ export interface RegistrationConfirmation {
   role: RegistrationRole;
 }
 
+export interface UserCreationConfirmation {
+  id: number | string;
+  name: string;
+  email: string;
+  role: RegistrationRole;
+  message: string;
+}
+
+export interface PatientAccount {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+export type StaffRole = Exclude<RegistrationRole, "patient">;
+
+export interface AdminStaffUser {
+  id: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: StaffRole;
+  phone: string;
+  gender: PatientGender | "";
+  createdAt: string;
+  isSignedIn: boolean;
+}
+
+export interface UpdateAdminStaffInput {
+  username: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: StaffRole;
+  phone?: string;
+  gender?: PatientGender;
+  password?: string;
+}
+
 export interface SubmissionConfirmation {
   id: number | string;
   message: string;
@@ -85,6 +135,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isRegistrationRole(value: unknown): value is RegistrationRole {
   return typeof value === "string" && registrationRoles.some((role) => role === value);
+}
+
+function isStaffRole(value: unknown): value is StaffRole {
+  return isRegistrationRole(value) && value !== "patient";
+}
+
+function isPatientGender(value: unknown): value is PatientGender {
+  return value === "female" || value === "male" || value === "non-binary" || value === "prefer-not-to-say";
 }
 
 function getApiBaseUrls(): string[] {
@@ -210,6 +268,243 @@ export function submitContactMessage(input: ContactMessageInput): Promise<Submis
   return post("/contact-messages", input, (value) => parseSubmission(value));
 }
 
+function parseUserCreation(value: unknown): UserCreationConfirmation {
+  const createdUser = isRecord(value) && isRecord(value.user) ? value.user : undefined;
+  if (
+    !isRecord(value)
+    || value.success !== true
+    || typeof value.message !== "string"
+    || !createdUser
+    || (typeof createdUser.id !== "number" && typeof createdUser.id !== "string")
+    || typeof createdUser.name !== "string"
+    || typeof createdUser.email !== "string"
+    || !isRegistrationRole(createdUser.role)
+    || createdUser.role === "patient"
+  ) {
+    throw new ApiRequestError("The user service returned an unexpected response.", 0, "INVALID_RESPONSE");
+  }
+  return {
+    id: createdUser.id,
+    name: createdUser.name,
+    email: createdUser.email,
+    role: createdUser.role,
+    message: value.message,
+  };
+}
+
+export function createUser(input: UserAccountInput): Promise<UserCreationConfirmation> {
+  if (input.role === "patient") {
+    throw new ApiRequestError(
+      "Patient registration will be available through a separate feature.",
+      0,
+      "PATIENT_REGISTRATION_UNAVAILABLE",
+    );
+  }
+  if (!csrfToken) {
+    throw new ApiRequestError(
+      "Your sign-in session is no longer available in this page. Please refresh and sign in again.",
+      0,
+      "CSRF_TOKEN_UNAVAILABLE",
+    );
+  }
+  return post(
+    "/v1/admin/users",
+    input,
+    (value) => {
+      const confirmation = parseUserCreation(value);
+      if (confirmation.role !== input.role) {
+        throw new ApiRequestError(
+          "The hospital service did not confirm creation with the requested role.",
+          0,
+          "ROLE_NOT_CONFIRMED",
+        );
+      }
+      return confirmation;
+    },
+    {
+      credentials: "include",
+      headers: { "X-CSRF-Token": csrfToken },
+      notFoundMessage: "User creation is not available on the hospital backend yet. Please try again after the admin user endpoint is deployed.",
+      sessionBound: true,
+    },
+  );
+}
+
+function parsePatientAccounts(value: unknown): PatientAccount[] {
+  if (!isRecord(value) || value.success !== true || !Array.isArray(value.patients)) {
+    throw new ApiRequestError("The patient service returned an unexpected response.", 0, "INVALID_RESPONSE");
+  }
+
+  return value.patients.map((patient) => {
+    if (
+      !isRecord(patient)
+      || (typeof patient.id !== "string" && typeof patient.id !== "number")
+      || typeof patient.name !== "string"
+      || typeof patient.email !== "string"
+      || typeof patient.createdAt !== "string"
+      || !Number.isFinite(Date.parse(patient.createdAt))
+    ) {
+      throw new ApiRequestError("The patient service returned an unexpected response.", 0, "INVALID_RESPONSE");
+    }
+
+    return {
+      id: String(patient.id),
+      name: patient.name,
+      email: patient.email,
+      createdAt: patient.createdAt,
+    };
+  });
+}
+
+export async function getAdminPatients(): Promise<PatientAccount[]> {
+  const baseUrls = sessionApiBaseUrl ? [sessionApiBaseUrl] : getApiBaseUrls();
+  let response: Response | undefined;
+  for (const baseUrl of baseUrls) {
+    try {
+      response = await fetch(`${baseUrl}/v1/admin/patients`, {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  if (!response) {
+    throw new ApiRequestError("Unable to reach the hospital service. Please try again.", 0, "NETWORK_ERROR");
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ApiRequestError("The hospital service returned an invalid response.", response.status, "INVALID_RESPONSE");
+  }
+
+  if (!response.ok) {
+    const message = isRecord(payload) && typeof payload.message === "string"
+      ? payload.message
+      : response.status === 404
+        ? "Patient accounts are not available on the hospital backend yet."
+        : "Unable to load patient accounts. Please try again.";
+    throw new ApiRequestError(message, response.status, "PATIENT_LIST_FAILED");
+  }
+
+  return parsePatientAccounts(payload);
+}
+
+function parseAdminStaffUser(value: unknown): AdminStaffUser {
+  if (
+    !isRecord(value)
+    || (typeof value.id !== "string" && typeof value.id !== "number")
+    || typeof value.username !== "string"
+    || typeof value.firstName !== "string"
+    || typeof value.lastName !== "string"
+    || typeof value.email !== "string"
+    || !isStaffRole(value.role)
+    || (value.phone !== undefined && typeof value.phone !== "string")
+    || (value.gender !== undefined && value.gender !== "" && !isPatientGender(value.gender))
+    || typeof value.createdAt !== "string"
+    || typeof value.isSignedIn !== "boolean"
+  ) {
+    throw new ApiRequestError("The staff service returned an unexpected response.", 0, "INVALID_RESPONSE");
+  }
+  return {
+    id: String(value.id),
+    username: value.username,
+    firstName: value.firstName,
+    lastName: value.lastName,
+    email: value.email,
+    role: value.role,
+    phone: typeof value.phone === "string" ? value.phone : "",
+    gender: isPatientGender(value.gender) ? value.gender : "",
+    createdAt: value.createdAt,
+    isSignedIn: value.isSignedIn,
+  };
+}
+
+function parseAdminStaffList(value: unknown): AdminStaffUser[] {
+  if (!isRecord(value) || value.success !== true || !Array.isArray(value.users)) {
+    throw new ApiRequestError("The staff service returned an unexpected response.", 0, "INVALID_RESPONSE");
+  }
+  return value.users.map(parseAdminStaffUser);
+}
+
+export async function getAdminStaff(): Promise<AdminStaffUser[]> {
+  if (!sessionApiBaseUrl) {
+    throw new ApiRequestError("Your sign-in session is no longer available in this page. Please sign in again.", 0, "CSRF_TOKEN_UNAVAILABLE");
+  }
+  let response: Response;
+  try {
+    response = await fetch(`${sessionApiBaseUrl}/v1/admin/users`, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiRequestError("Unable to reach the hospital service. Please try again.", 0, "NETWORK_ERROR");
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ApiRequestError("The hospital service returned an invalid response.", response.status, "INVALID_RESPONSE");
+  }
+  if (!response.ok) {
+    const message = isRecord(payload) && typeof payload.message === "string"
+      ? payload.message
+      : response.status === 404
+        ? "Staff management is not available on the hospital backend yet."
+        : "Unable to load staff. Please try again.";
+    throw new ApiRequestError(message, response.status, "STAFF_LIST_FAILED");
+  }
+  return parseAdminStaffList(payload);
+}
+
+export async function updateAdminStaffUser(
+  id: string,
+  input: UpdateAdminStaffInput,
+): Promise<{ message: string }> {
+  if (!csrfToken || !sessionApiBaseUrl) {
+    throw new ApiRequestError("Your sign-in session is no longer available in this page. Please sign in again.", 0, "CSRF_TOKEN_UNAVAILABLE");
+  }
+  let response: Response;
+  try {
+    response = await fetch(`${sessionApiBaseUrl}/v1/admin/users/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify(input),
+    });
+  } catch {
+    throw new ApiRequestError("Unable to reach the hospital service. Please try again.", 0, "NETWORK_ERROR");
+  }
+
+  let payload: unknown;
+  try {
+    payload = response.status === 204 ? undefined : await response.json();
+  } catch {
+    throw new ApiRequestError("The hospital service returned an invalid response.", response.status, "INVALID_RESPONSE");
+  }
+  if (!response.ok) {
+    const message = isRecord(payload) && typeof payload.message === "string"
+      ? payload.message
+      : "Unable to update this staff account. Please try again.";
+    throw new ApiRequestError(message, response.status, "STAFF_UPDATE_FAILED");
+  }
+  if (!isRecord(payload) || payload.success !== true || typeof payload.message !== "string") {
+    throw new ApiRequestError("The staff service returned an unexpected response.", 0, "INVALID_RESPONSE");
+  }
+  return { message: payload.message };
+}
+
 function parseRegistration(value: unknown, requestedRole: RegistrationRole): RegistrationConfirmation {
   const user = isRecord(value) && isRecord(value.user) ? value.user : undefined;
   if (
@@ -235,7 +530,7 @@ function parseRegistration(value: unknown, requestedRole: RegistrationRole): Reg
   return { message: value.message, role: user.role };
 }
 
-export function registerPatient(input: PatientRegistrationInput): Promise<RegistrationConfirmation> {
+export function registerPatient(input: UserAccountInput): Promise<RegistrationConfirmation> {
   return post("/v1/auth/register", input, (value) => parseRegistration(value, input.role));
 }
 

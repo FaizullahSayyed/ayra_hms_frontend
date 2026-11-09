@@ -86,7 +86,7 @@ export default function DashboardLayout({
             </div>
           </div>
           {children}
-          <footer className="dashboard-footer"><span>Ayra Hospital · {roleLabel} workspace</span><span>Preview data only · Not connected to live hospital records</span></footer>
+          <footer className="dashboard-footer"><span>Ayra Hospital · {roleLabel} workspace</span><span>{role === "admin" ? "Patient accounts are live · Other dashboard data is a preview" : "Dashboard information may include preview data"}</span></footer>
         </main>
       </div>
     </div>

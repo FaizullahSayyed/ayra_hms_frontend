@@ -14,7 +14,7 @@ export const adminNavigation: DashboardNavItem[] = [
   { id: "overview", label: "Overview", icon: HiOutlineHome, sectionId: "admin-overview" },
   { id: "appointments", label: "Appointments", icon: HiOutlineCalendarDays, sectionId: "admin-appointments", badge: "08" },
   { id: "patients", label: "Patients", icon: HiOutlineUsers, sectionId: "admin-patients" },
-  { id: "staff", label: "Staff", icon: HiOutlineUserGroup, badge: "Soon" },
+  { id: "staff", label: "Staff", icon: HiOutlineUserGroup, sectionId: "admin-staff" },
   { id: "departments", label: "Departments", icon: HiOutlineBuildingOffice2, badge: "Soon" },
   { id: "reports", label: "Reports & analytics", icon: HiOutlineChartBar, badge: "Soon" },
 ];
